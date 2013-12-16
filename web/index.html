@@ -1,0 +1,382 @@
+<html>
+	<head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+		<link rel="stylesheet" media="screen" href="bootstrap/css/bootstrap.min.css">
+		<script src="javascripts/jquery-1.9.0.min.js" type="text/javascript"></script>
+		<script src="bootstrap/js/bootstrap.min.js" type="text/javascript"></script>
+		<script src="http://autobahn.s3.amazonaws.com/js/autobahn.min.js" type="text/javascript"></script>
+		<style type="text/css">
+			.page-header {
+				border-bottom: none;
+				padding-bottom: 0px;
+			}
+
+			#trackAddedAlert {
+				opacity: 0;
+			}
+
+			.loading {
+  				margin: 10% auto;
+				border-bottom: 6px solid #fff;
+				border-left: 6px solid #fff;
+				border-right: 6px solid #c30;
+				border-top: 6px solid #c30;
+				border-radius: 100%;
+				height: 125px;
+				width: 125px;
+				-webkit-animation: spin .6s infinite linear;
+				-moz-animation: spin .6s infinite linear;
+				-ms-animation: spin .6s infinite linear;
+				-o-animation: spin .6s infinite linear;
+				animation: spin .6s infinite linear;
+			}
+
+			@keyframes "spin" {
+			 from {
+			    -webkit-transform: rotate(0deg);
+			   	-moz-transform: rotate(0deg);
+			   	-o-transform: rotate(0deg);
+			   	-ms-transform: rotate(0deg);
+			   	transform: rotate(0deg);
+			 }
+			 to {
+			    -webkit-transform: rotate(359deg);
+			   	-moz-transform: rotate(359deg);
+			   	-o-transform: rotate(359deg);
+			   	-ms-transform: rotate(359deg);
+			   	transform: rotate(359deg);
+			 }
+
+			}
+
+			@-moz-keyframes spin {
+			 from {
+			   -moz-transform: rotate(0deg);
+			   transform: rotate(0deg);
+			 }
+			 to {
+			   -moz-transform: rotate(359deg);
+			   transform: rotate(359deg);
+			 }
+
+			}
+
+			@-webkit-keyframes "spin" {
+			 from {
+			   -webkit-transform: rotate(0deg);
+			   transform: rotate(0deg);
+			 }
+			 to {
+			   -webkit-transform: rotate(359deg);
+			   transform: rotate(359deg);
+			 }
+
+			}
+
+			@-ms-keyframes "spin" {
+			 from {
+			   -ms-transform: rotate(0deg);
+			   transform: rotate(0deg);
+			 }
+			 to {
+			   -ms-transform: rotate(359deg);
+			   transform: rotate(359deg);
+			 }
+
+			}
+
+			@-o-keyframes "spin" {
+			 from {
+			   -o-transform: rotate(0deg);
+			   transform: rotate(0deg);
+			 }
+			 to {
+			   -o-transform: rotate(359deg);
+			   transform: rotate(359deg);
+			 }
+
+			}
+		</style>
+		<script type="text/javascript">
+			// WebSocket Session
+ 			var session;
+
+ 			// Number of Tracks in Playlist
+ 			var playlistCounter = 0;
+
+ 			// Id of current Track
+ 			var currentTrackId;
+
+ 			function playNextTrack() {
+ 				session.call("musicplayer/music#playNextTrack");
+ 			}
+
+ 			function playPreviousTrack() {
+ 				session.call("musicplayer/music#playPreviousTrack");
+ 			}
+ 			
+			function search(query, success, error) {
+   				// asynchronous RPC, returns promise object
+   				session.call("musicplayer/music#search", query).then(success, error);
+ 			}
+
+ 			function playTrack(trackId) {
+ 				session.call("musicplayer/music#play", trackId).then(function(res){console.log(res)}, function(err){console.log("error: " + JSON.stringify(err))});
+ 			}
+
+ 			function addToPlaylist(track) {
+ 				session.call("musicplayer/music#addToPlaylist", JSON.stringify(track)).then(function(res){
+					$('#trackAddedAlert').animate({opacity: 1}, 300, function() {
+						$('#trackAddedAlert').delay(2000).animate({opacity: 0}, 300);
+  					});
+ 				}, function(err){
+ 					Alert("Error!");
+ 				});
+ 			}
+
+ 			function getPlaylist() {
+ 				session.call("musicplayer/music#getPlaylist").then(function(res){
+ 					var resultArray = $.parseJSON( res );
+ 					console.log(res);
+ 					$.each(resultArray, function(index, track) {
+ 						addTrackToPlaylistTable(track);
+	 				});
+ 				}, function(err){console.log("error: " + JSON.stringify(err))});
+ 			}
+
+ 			function addTrackToPlaylistTable(track) {
+ 				$('#playlistTable > tbody').append("<tr>"
+					+ "<td style='vertical-align:middle'><img src='" + track.albumArtRef[0].url + "' style='width: 34px; height: 34px'/></td>"
+					+ "<td style='vertical-align:middle'>" + track.artist + "</td>"
+					+ "<td style='vertical-align:middle'>" + track.title + "</td>"
+					+ "<td style='vertical-align:middle'>" + track.album + "</td>"
+					+ "<td style='vertical-align:middle'><a href='#' onClick='playTrack(" + playlistCounter + ");'><span class='glyphicon glyphicon-play'></span></a></td>"
+					+ "</tr>");
+
+ 				playlistCounter++;
+ 			}
+
+ 			function stop() {
+ 				session.call("musicplayer/music#stop");
+ 			}
+
+ 			function setCurrentTrack(track) {
+ 				$('#currentTrack #artist').text(track.artist);
+ 				$('#currentTrack #track').text(track.title);
+ 				$('#currentTrack #album').text(track.album);
+ 				$('#currentTrack #genre').text(track.genre);
+ 				$('#currentTrack #duration').text(track.duration);
+ 				$('#currentTrack #albumArt').attr("src", track.albumArtRef[0].url);
+ 			}
+
+ 			function showIndexPage() {
+ 				$('#index').removeClass("hidden");
+				$('#searchResults').addClass("hidden");
+				$('#queryBox').val("");
+	 		}
+
+ 			window.onload = function() {
+	 
+	   			// WAMP server
+	   			var wsuri = "ws://192.168.1.99:9000";
+
+	   			$('#searchBox').submit(function(event) {
+	 				event.preventDefault();
+	 				var query = $('#queryBox').val();
+
+	 				$('#searchResults').removeClass("hidden");
+	 				$('#index').addClass("hidden");
+
+	 				$('#searchResultTable').addClass("hidden");
+					$('#loadingAnimation').removeClass("hidden");
+	 				
+					search(query, function(res){
+	 					var resultArray = $.parseJSON( res );
+						
+						$('#searchResultTable > tbody').empty();
+
+	 					$.each(resultArray, function(index, value) {
+	 						var track = value.track;
+
+	 						$('#searchResultTable > tbody').append("<tr>"
+								+ "<td style='vertical-align:middle'><img src='" + track.albumArtRef[0].url + "' style='width: 34px; height: 34px'/></td>"
+								+ "<td style='vertical-align:middle'>" + track.artist + "</td>"
+								+ "<td style='vertical-align:middle'>" + track.title + "</td>"
+								+ "<td style='vertical-align:middle'>" + track.album + "</td>"
+								+ "<td style='vertical-align:middle'><a href='#' onClick='addToPlaylist(" + JSON.stringify(track) + ");'><span class='glyphicon glyphicon-plus'></span></a></td>"
+								+ "</tr>");
+	 					});
+
+						$('#searchResultTable').removeClass("hidden");
+						$('#loadingAnimation').addClass("hidden");
+
+					}, function(res){
+	 					console.log("error");
+	 					
+	 				});
+	 			});
+
+	   			ab.connect(wsuri,
+	 
+	      			// WAMP session was established
+	      			function (s) {
+	 					session = s;
+	        	 		
+	        	 		// Subscribe to newtrack events that get fired when a new Track is added to the Playlist
+	        	 		s.subscribe("musicplayer/newtrack", function(topicUri, event) {
+	        	 			var track = $.parseJSON(event);
+
+	        	 			addTrackToPlaylistTable(track);
+	        	 		});
+
+	        	 		// Subscribe to playingtrack events that get fired when a Track starts playing
+	        	 		s.subscribe("musicplayer/playingtrack", function(topicUri, event) {
+	        	 			var track = $.parseJSON(event);
+	        	 			setCurrentTrack(track);
+	        	 		});
+
+	        	 		// Get Status from Server
+	        	 		s.call("musicplayer/music#getStatus").then(function(res) {
+	        	 			var status = $.parseJSON(res);
+	        	 			setCurrentTrack(status.currentTrack);
+	        	 			console.log(res);
+	        	 		});
+	        	 	
+	        	 		// Initialy load Playlist from server	
+	        	 		getPlaylist();
+	        	 	},
+	 
+	      			// WAMP session is gone
+	      			function (code, reason) {
+	         			console.log(reason);
+	      			}
+	   			);
+			};
+		</script>
+	</head>
+	<body>
+	    <div class="navbar navbar-inverse navbar-default navbar-fixed-top">
+	        <div class="container">
+	            <div class="navbar-header">
+	                <a href="../" class="navbar-brand"><span class="glyphicon glyphicon-headphones"></span> Denaid All Access</a>
+	                <button class="navbar-toggle" type="button" data-toggle="collapse" data-target="#navbar-main">
+	                    <span class="icon-bar"></span>
+	                    <span class="icon-bar"></span>
+	                    <span class="icon-bar"></span>
+	                </button>
+	            </div>
+	            <div class="navbar-collapse collapse" id="navbar-main">
+	                <ul class="nav navbar-nav">
+	                	<li>
+	                    	<form id="searchBox" class="navbar-form">
+	                        	<input id="queryBox" type="text" class="form-control col-lg-12" placeholder="Search" style="border-radius: 2px;">
+	                    	</form>
+	                    </li>
+	                    <li class="dropdown">
+        					<a href="#" class="dropdown-toggle" data-toggle="dropdown">Playmode <b class="caret"></b></a>
+        						<ul class="dropdown-menu">
+          							<li><a href="#"><span class="glyphicon glyphicon-arrow-right"/> Linear</a></li>
+          							<li><a href="#"><span class="glyphicon glyphicon-random"/> Shuffle</a></li>
+        						</ul>
+      					</li>
+	                    <li>
+	                    	<a href="#" onClick="playPreviousTrack();"><i class="glyphicon glyphicon-step-backward"></i> Prev</a>
+	                    </li>
+	                    <li>
+	                    	<a href="#" onClick="stop();"><i class="glyphicon glyphicon-stop"></i> Stop</a>
+	                    </li>
+	                    <li>
+	                    	<a href="#" onClick="playNextTrack();"><i class="glyphicon glyphicon-step-forward"></i> Next</a>
+	                    </li>
+	                </ul>
+				</div>
+	        </div>
+	    </div>
+
+
+		<!-- SearchResults -->
+	    <div id="searchResults" class="container hidden" style="padding-top: 65px">
+			<div class="row col-md-12">
+				<div class="row col-md-2">
+					<a href="#" class="btn btn-primary" onClick="showIndexPage();"><i class="glyphicon glyphicon-chevron-left"></i> Go back</a>
+				</div>
+
+				<div class="col-md-10">
+					<div id="trackAddedAlert" class="alert alert-success"><i class="glyphicon glyphicon-ok"></i> Track added </div>
+				</div>
+
+				<div class="page-header">
+					<h2>Search results</h2>
+				</div>
+
+				<div id="loadingAnimation" class="loading"></div>
+				
+				<table id="searchResultTable" class="table table-hover hidden">
+					<thead>
+						<tr>
+							<th></th>
+							<th>Artist</th>
+							<th>Song</th>
+							<th>Album</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+				
+			</div>
+		</div>
+
+	    <!-- Index Page -->
+	    <div id="index" class="container" style="padding-top: 25px">
+			<div id="currentTrack" class="row col-md-12">
+				<div class="page-header">
+					<h2>Current Track</h2>
+				</div>
+
+
+				<div class="col-md-2">
+					<img id="albumArt" class="img-responsive" src="" style="width: 120px; height: 120px;">
+				</div>
+
+				<div class="col-md-10">
+					<div class="row col-md-12">
+						<h4><span id="artist">Nobody</span> - <span id="track">Nothing</span></h4>
+					</div>
+
+					<div class="row col-md-12">
+						<span id="album">Great Silence</span>
+					</div>
+
+					<div class="row col-md-12">
+						<small>Duration: <span id="duration">Infinite</span></small><br/>
+						<small>Genre: <span id="genre">Worldsound</span></small>
+					</div>
+				</div>
+
+			</div>
+
+	    	<div class="row col-md-12">
+				<div class="page-header">
+					<h2>Playlist</h2>
+				</div>
+
+				
+				<table id="playlistTable" class="table table-hover">
+					<thead>
+						<tr>
+							<th></th>
+							<th>Artist</th>
+							<th>Song</th>
+							<th>Album</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+				
+			</div>
+		</div>
+	</body>
+</html>
