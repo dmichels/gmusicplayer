@@ -179,7 +179,7 @@
  			window.onload = function() {
 	 
 	   			// WAMP server
-	   			var wsuri = "ws://192.168.1.99:9000";
+	   			var wsuri = "ws://" + document.location.hostname +":9000";
 
 	   			$('#searchBox').submit(function(event) {
 	 				event.preventDefault();
