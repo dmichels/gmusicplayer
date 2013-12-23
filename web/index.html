@@ -31,18 +31,16 @@
 	                    	</form>
 	                    </li>
 	                    <li class="dropdown">
-        					<a href="#" class="dropdown-toggle" data-toggle="dropdown">
-        						Playtype <b class="caret"></b>
-        					</a>
+        					<a id="currentPlaytype" href="#" class="dropdown-toggle" data-toggle="dropdown"></a>
 
-        						<ul class="dropdown-menu">
-          							<li id="linearMode">
-          								<a href="#" onClick="setPlayType('linear');"><span class="glyphicon glyphicon-arrow-right"/> Linear</a>
-          							</li>
-          							<li id="shuffleMode">
-          								<a href="#" onClick="setPlayType('shuffle');"><span class="glyphicon glyphicon-random"/> Shuffle</a>
-          							</li>
-        						</ul>
+							<ul class="dropdown-menu">
+								<li id="linearMode">
+          							<a href="#" onClick="setPlayType(PLAYTYPE_LINEAR);"><span class="glyphicon glyphicon-arrow-right"/> Linear</a>
+          						</li>
+          						<li id="shuffleMode">
+          							<a href="#" onClick="setPlayType(PLAYTYPE_SHUFFLE);"><span class="glyphicon glyphicon-random"/> Shuffle</a>
+          						</li>
+        					</ul>
       					</li>
 	                    <li>
 	                    	<a href="#" onClick="playPreviousTrack();"><i class="glyphicon glyphicon-step-backward"></i> Prev</a>

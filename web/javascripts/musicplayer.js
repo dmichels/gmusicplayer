@@ -4,6 +4,9 @@ var session;
 // Id of current Track
 var currentTrackId;
 
+var PLAYTYPE_LINEAR = 1;
+var PLAYTYPE_SHUFFLE = 2;
+
 $(document).ready(function() {
 	// WAMP server
 	var wsuri = "ws://" + document.location.hostname +":9000";
@@ -112,6 +115,7 @@ $(document).ready(function() {
  				var status = $.parseJSON(statusJson);
 
  				handleEvent_TrackPlayback(status.currentTrack);
+ 				handleEvent_PlaytypeChanged(status.playtype);
 			});
  	
  			// Initialy load Playlist from server	
@@ -132,7 +136,11 @@ $(document).ready(function() {
  *	@param {String} The id of the track that has been removed from playlist
  **/
 function handleEvent_TrackRemovedFromPlaylist(trackId) {
-	$('#playlistTable > tbody').find("[data-id='" + trackId + "']").remove();
+	try {
+		$('#playlistTable > tbody').find("[data-id='" + trackId + "']").remove();
+	} catch (exception) {
+		console.log(exception);
+	}
 }
 
 /**
@@ -142,34 +150,35 @@ function handleEvent_TrackRemovedFromPlaylist(trackId) {
  *	@param {Object} The track that has been added to playlist
  **/
 function handleEvent_TrackAddedToPlaylist(track) {
-	$('#playlistTable > tbody').append("<tr data-id='" + track.nid + "'>"
-		+ "<td style='vertical-align:middle'><a href='#'><img class='albumArt' src='" + track.albumArtRef[0].url + "'/></a></td>"
-		+ "<td style='vertical-align:middle'>" + track.artist + "</td>"
-		+ "<td style='vertical-align:middle'>" + track.title + "</td>"
-		+ "<td style='vertical-align:middle'>" + track.album + "</td>"
-		+ "<td style='vertical-align:middle'><a href='#' class='play_track'><i class='glyphicon glyphicon-play'></i></a></td>"
-		+ "<td style='vertical-align:middle'><a href='#' class='remove_track'><i class='glyphicon glyphicon-remove-sign'></i></a></td>"
-		+ "</tr>");
+	try {
+		$('#playlistTable > tbody').append("<tr data-id='" + track.nid + "'>"
+			+ "<td style='vertical-align:middle'><a href='#'><img class='albumArt' src='" + track.albumArtRef[0].url + "'/></a></td>"
+			+ "<td style='vertical-align:middle'>" + track.artist + "</td>"
+			+ "<td style='vertical-align:middle'>" + track.title + "</td>"
+			+ "<td style='vertical-align:middle'>" + track.album + "</td>"
+			+ "<td style='vertical-align:middle'><a href='#' class='play_track'><i class='glyphicon glyphicon-play'></i></a></td>"
+			+ "<td style='vertical-align:middle'><a href='#' class='remove_track'><i class='glyphicon glyphicon-remove-sign'></i></a></td>"
+			+ "</tr>");
+	} catch (exception) {
+		console.log(exception);
+	}
 }
 
 /**
  * Set new playtype
  *
  * @method handleEvent_PlaytypeChanged
- * @param {String} The new playtype
+ * @param {Integer} The new playtype
  **/
 function handleEvent_PlaytypeChanged(playtype) {
-	/**
-	$('#mode').text(playtype);
+	$('#currentPlaytype').empty();
 
-	if(playtype == "linear") {
-		$('#linearMode').removeClass("hidden");
-		$('#shuffleMode').addClass("hidden");
+	if(playtype == PLAYTYPE_LINEAR) {
+		$('#currentPlaytype').append("<i class='glyphicon glyphicon-arrow-right'/></i> Linear <b class='caret'></b>");
 	} else {
-		$('#shuffleMode').removeClass("hidden");
-		$('#linearMode').addClass("hidden");
+		$('#currentPlaytype').append("<i class='glyphicon glyphicon-random'/></i> Shuffle <b class='caret'></b>");
 	}
-	**/
+	
 }
 
 /**
@@ -179,20 +188,24 @@ function handleEvent_PlaytypeChanged(playtype) {
  *	@param {Object} The track that is playing
  **/
 function handleEvent_TrackPlayback(track) {
-	var duration = track.durationMillis / 1000;
+	try {
+		var duration = track.durationMillis / 1000;
 
-	var minutes = Math.floor(duration / 60);
-	var seconds = duration - (minutes * 60);
+		var minutes = Math.floor(duration / 60);
+		var seconds = duration - (minutes * 60);
 
-	if(seconds < 10) { seconds = "0" + seconds; }
+		if(seconds < 10) { seconds = "0" + seconds; }
 
 
-	$('#currentTrack #artist').text(track.artist);
-	$('#currentTrack #track').text(track.title);
-	$('#currentTrack #album').text(track.album);
-	$('#currentTrack #genre').text(track.genre);
-	$('#currentTrack #duration').text( minutes + ":" + seconds);
-	$('#currentTrack #albumArt').attr("src", track.albumArtRef[0].url);
+		$('#currentTrack #artist').text(track.artist);
+		$('#currentTrack #track').text(track.title);
+		$('#currentTrack #album').text(track.album);
+		$('#currentTrack #genre').text(track.genre);
+		$('#currentTrack #duration').text( minutes + ":" + seconds);
+		$('#currentTrack #albumArt').attr("src", track.albumArtRef[0].url);
+	} catch (exception) {
+		console.log(exception);
+	}
 }
 
 /**

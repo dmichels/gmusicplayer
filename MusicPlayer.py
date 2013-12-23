@@ -244,11 +244,17 @@ class RpcServerProtocol(WampServerProtocol):
     def get_status(self):
         status = dict()
 
-        current_track_id = musicplayer.playlist.get_current_track_id()
+        try:
+            current_track_id = musicplayer.playlist.get_current_track_id()
 
-        current_track = musicplayer.playlist.get_track(current_track_id)
+            current_track = musicplayer.playlist.get_track(current_track_id)
 
-        status['currentTrack'] = current_track
+            status['currentTrack'] = current_track
+        except:
+            pass
+
+        status['playtype'] = musicplayer.playlist.get_playtype()
+
         return json.dumps(status)
 
     @exportRpc
@@ -269,14 +275,8 @@ class RpcServerProtocol(WampServerProtocol):
 
     @exportRpc
     def set_playtype(self, playtype):
-        self.dispatch(PLAYLIST_EVENT_PLAYTYPE_CHANGED, playtype)
-
-        if playtype == "linear":
-            playtype = PlayType.LINEAR
-        elif playtype == "shuffle":
-            playtype = PlayType.SHUFFLE
-
         musicplayer.playlist.set_playtype(playtype)
+        self.dispatch(PLAYLIST_EVENT_PLAYTYPE_CHANGED, playtype)
 
     def onSessionOpen(self):
         self.registerForPubSub(PLAYLIST_EVENT_TRACK_ADDED)
