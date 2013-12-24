@@ -33,7 +33,7 @@ class PlayType(Enum):
 
 class MusicPlayer(object):
 
-    def __init__(self, playlist_name):
+    def __init__(self):
         self.playlist = []                  # Array of all tracks
         self.playlist_id = 0                # Id of playlist
         self.current_track_index = 0        # Index of current song
@@ -42,7 +42,6 @@ class MusicPlayer(object):
         self.mobileclient = Mobileclient()  # Client for MobileInterface
         self.timer = None                   # Timer to start next track
         self.deviceid = 0                   # DeviceId to use
-        self.playlist_name = playlist_name  # Name of the playlist to use
         self.playtype = PlayType.LINEAR     # LINEAR or SHUFFLE
 
     def login(self, username, password):
@@ -67,9 +66,12 @@ class MusicPlayer(object):
         # Convert HEX to INT
         self.deviceid = int(devices[0]['id'], 16)
 
+        return True
+
+    def load_playlist(self, playlist_name):
         # Load playlist
         for playlist in self.mobileclient.get_all_user_playlist_contents():
-            if playlist['name'] == self.playlist_name:
+            if playlist['name'] == playlist_name:
                 for track_obj in playlist['tracks']:
                     track_obj['track']['id'] = track_obj['id']
                     self.playlist.append(track_obj['track'])
@@ -78,7 +80,9 @@ class MusicPlayer(object):
                 self.playlist_id = playlist['id']
                 break;
 
-        return True
+        # If playlist has not been found, create it
+        if self.playlist_id == 0:
+            self.playlist_id = self.mobileclient.create_playlist(playlist_name)
 
     def add_track_to_playlist(self, track):
         """ Append a track to the end of playlist
@@ -331,13 +335,20 @@ class RpcServerProtocol(WampServerProtocol):
         factory.forwarder = self
 
 
-musicplayer = MusicPlayer("musicplayer")
+musicplayer = MusicPlayer()
 
 if __name__ == '__main__':
+    if len(sys.argv) <= 3:
+        print "Usage: Musicplayer.py <username> <password> <playlist_name>"
+        exit()
+
     username = sys.argv[1]
     password = sys.argv[2]
+    playlist_name = sys.argv[3]
 
     if musicplayer.login(username, password):
+        musicplayer.load_playlist(playlist_name)
+
         factory = WampServerFactory("ws://localhost:9000")
         factory.protocol = RpcServerProtocol
         listenWS(factory)
