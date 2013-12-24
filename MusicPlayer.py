@@ -1,11 +1,11 @@
-from Playlist import Playlist, PlayType
-
 __author__ = 'daniel michels'
 
 import json
 import sys
+import random
 
 
+from enum import Enum
 from threading import Timer
 from gmusicapi import Mobileclient, Webclient
 from mplayer import Player
@@ -18,21 +18,32 @@ from autobahn.wamp import WampServerFactory, WampServerProtocol, exportRpc
 
 PLAYLIST_EVENT_TRACK_ADDED = 'musicplayer/playlist/events/track_added_to_playlist'
 PLAYLIST_EVENT_TRACK_REMOVED = 'musicplayer/playlist/events/track_removed_from_playlist'
-
 PLAYLIST_EVENT_PLAYTYPE_CHANGED = 'musicplayer/playlist/events/playtype_changed'
 
 TRACK_EVENT_PLAYBACK = 'musicplayer/events/playback'
 
 
+class PlayType(Enum):
+    """ Describes the order in which the Playlist returns the tracks to play.
+
+    """
+    LINEAR = 1      # Linear order
+    SHUFFLE = 2     # Shuffle
+
+
 class MusicPlayer(object):
 
-    def __init__(self):
-        self.playlist = Playlist()
-        self.player = Player()
+    def __init__(self, playlist_name):
+        self.playlist = []                  # Array of all tracks
+        self.playlist_id = 0                # Id of playlist
+        self.current_track_index = 0        # Index of current song
+        self.player = Player()              # MPlayer instance
         self.webclient = Webclient()        # Client for WebInterface
         self.mobileclient = Mobileclient()  # Client for MobileInterface
-        self.timer = None
-        self.deviceid = 0
+        self.timer = None                   # Timer to start next track
+        self.deviceid = 0                   # DeviceId to use
+        self.playlist_name = playlist_name  # Name of the playlist to use
+        self.playtype = PlayType.LINEAR     # LINEAR or SHUFFLE
 
     def login(self, username, password):
         """ Login to Google Music.
@@ -56,6 +67,17 @@ class MusicPlayer(object):
         # Convert HEX to INT
         self.deviceid = int(devices[0]['id'], 16)
 
+        # Load playlist
+        for playlist in self.mobileclient.get_all_user_playlist_contents():
+            if playlist['name'] == self.playlist_name:
+                for track_obj in playlist['tracks']:
+                    track_obj['track']['id'] = track_obj['id']
+                    self.playlist.append(track_obj['track'])
+
+                # Set playlist_id
+                self.playlist_id = playlist['id']
+                break;
+
         return True
 
     def add_track_to_playlist(self, track):
@@ -64,17 +86,13 @@ class MusicPlayer(object):
         Keyword arguments:
         track -- a dictionary containing the track informations
 
-        Returns:
-        True or False
-
         """
-        result = self.playlist.add_track(track)
+        track_id = self.mobileclient.add_songs_to_playlist(self.playlist_id, track['nid'])[0]
+        track['id'] = track_id
+        self.playlist.append(track)
 
-        if result:
-            # Notify all clients about the new track
-            factory.forwarder.dispatch(PLAYLIST_EVENT_TRACK_ADDED, json.dumps(track))
-
-        return result
+        # Notify all clients about the new track
+        factory.forwarder.dispatch(PLAYLIST_EVENT_TRACK_ADDED, json.dumps(track))
 
     def remove_track_from_playlist(self, track_id):
         """ Removes a track from the playlist
@@ -82,18 +100,14 @@ class MusicPlayer(object):
         Keyword arguments:
         track_id -- The id of the track to remove
 
-        Returns:
-        True or False
-
         """
+        self.mobileclient.remove_entries_from_playlist(track_id)
 
-        result = self.playlist.remove_track(track_id)
+        index_to_remove = self._find_index_of_track_id(track_id)
 
-        # If track has been removed, notify all clients about it
-        if result:
-            factory.forwarder.dispatch(PLAYLIST_EVENT_TRACK_REMOVED, track_id)
+        del self.playlist[index_to_remove]
 
-        return result
+        factory.forwarder.dispatch(PLAYLIST_EVENT_TRACK_REMOVED, track_id)
 
     def play_track(self, track_id):
         """ Play a track
@@ -101,16 +115,15 @@ class MusicPlayer(object):
         Keyword arguments:
         track_id -- Id of the track to play
 
-        Returns:
-        True or False
-
         """
 
-        # Get track from playlist
-        track = self.playlist.get_track(track_id)
-        if track is not None:
+        index_of_track = self._find_index_of_track_id(track_id)
+
+        track_to_play = self.playlist[index_of_track]
+
+        if track_to_play is not None:
             # Request stream url from google music
-            stream_url = self.mobileclient.get_stream_url(track["nid"], self.deviceid)
+            stream_url = self.mobileclient.get_stream_url(track_to_play["storeId"], self.deviceid)
 
             # Load stream url to mplayer
             self.player.loadfile(stream_url)
@@ -120,24 +133,24 @@ class MusicPlayer(object):
                 self.player.pause()
 
             # Set track
-            self.playlist.set_current_track(track_id)
+            self.current_track_index = index_of_track
 
             # Cancel previous timer
             if self.timer is not None:
                 self.timer.cancel()
 
             # How many minutes does the track last
-            track_duration = long(track["durationMillis"]) / 1000
+            track_duration = long(track_to_play["durationMillis"]) / 1000
 
             # Set Timer to play next track when trackDuration is over
             self.timer = Timer(track_duration, self.play_next_track)
             self.timer.daemon = True
             self.timer.start()
 
-            print "playing", track["artist"], " - ", track["title"], " : ", stream_url
+            print "playing", track_to_play["artist"], " - ", track_to_play["title"], " : ", stream_url
 
             # Fire event that a new track is playing
-            factory.forwarder.dispatch(TRACK_EVENT_PLAYBACK, json.dumps(track))
+            factory.forwarder.dispatch(TRACK_EVENT_PLAYBACK, json.dumps(track_to_play))
 
             return True
         else:
@@ -151,8 +164,20 @@ class MusicPlayer(object):
 
         """
 
+        if self.playtype == PlayType.LINEAR:
+            # Index of next track to play
+            next_track_index = self.current_track_index + 1
+
+            # Restart at index 0 if end of playlist is reached
+            if next_track_index >= len(self.playlist):
+                next_track_index = 0
+
+        elif self.playtype == PlayType.SHUFFLE:
+            # Index of next track to play at random
+            next_track_index = random.randrange(0, len(self.playlist), 1)
+
         # Obtain the id of the next track to play
-        next_track_id = self.playlist.get_next_track_id()
+        next_track_id = self.playlist[next_track_index]['id']
 
         # Play track with that id
         return self.play_track(next_track_id)
@@ -165,8 +190,20 @@ class MusicPlayer(object):
 
         """
 
+        if self.playtype == PlayType.LINEAR:
+            # Index of previous track to play
+            previous_track_index = self.current_track_index - 1
+
+            # Contiune from the end of the playlist
+            if previous_track_index <= 0:
+                previous_track_index = len(self.playlist) - 1
+
+        elif self.playtype == PlayType.SHUFFLE:
+            # Index of the previous track is random
+            previous_track_index = random.randrange(0, len(self.playlist), 1)
+
         # Obtain the id of the previous track to play
-        previous_track_id = self.playlist.get_previous_track_id()
+        previous_track_id = self.playlist[previous_track_index]['id']
 
         # Play track with that id
         return self.play_track(previous_track_id)
@@ -189,8 +226,18 @@ class MusicPlayer(object):
         True if track has been started. Else False
 
         """
-        current_track_id = self.playlist.get_current_track_id()
+        current_track_id = self.playlist[self.current_track_index]
         return self.play_track(current_track_id)
+
+    def _find_index_of_track_id(self, track_id):
+        index = 0
+
+        for track in self.playlist:
+            if track['id'] == track_id:
+                return index
+            index += 1
+
+        return None
 
 
 class RpcServerProtocol(WampServerProtocol):
@@ -210,7 +257,7 @@ class RpcServerProtocol(WampServerProtocol):
 
     @exportRpc
     def get_playlist(self):
-        return json.dumps(musicplayer.playlist.get_tracks())
+        return json.dumps(musicplayer.playlist)
 
     @exportRpc
     def play_next_track(self):
@@ -253,21 +300,17 @@ class RpcServerProtocol(WampServerProtocol):
         except:
             pass
 
-        status['playtype'] = musicplayer.playlist.get_playtype()
+        status['playtype'] = musicplayer.playtype
 
         return json.dumps(status)
 
     @exportRpc
-    def add_to_playlist(self, trackJson):
-        result = dict()
-
+    def add_to_playlist(self, track_json):
         # Convert Json to dictionary
-        track = json.loads(trackJson)
+        track = json.loads(track_json)
 
         # Append track to playlist
-        result['status'] = musicplayer.add_track_to_playlist(track)
-
-        return json.dumps(result)
+        musicplayer.add_track_to_playlist(track)
 
     @exportRpc
     def remove_from_playlist(self, track_id):
@@ -275,7 +318,7 @@ class RpcServerProtocol(WampServerProtocol):
 
     @exportRpc
     def set_playtype(self, playtype):
-        musicplayer.playlist.set_playtype(playtype)
+        musicplayer.playtype = playtype
         self.dispatch(PLAYLIST_EVENT_PLAYTYPE_CHANGED, playtype)
 
     def onSessionOpen(self):
@@ -288,7 +331,7 @@ class RpcServerProtocol(WampServerProtocol):
         factory.forwarder = self
 
 
-musicplayer = MusicPlayer()
+musicplayer = MusicPlayer("musicplayer")
 
 if __name__ == '__main__':
     username = sys.argv[1]

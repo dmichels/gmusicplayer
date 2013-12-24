@@ -151,7 +151,7 @@ function handleEvent_TrackRemovedFromPlaylist(trackId) {
  **/
 function handleEvent_TrackAddedToPlaylist(track) {
 	try {
-		$('#playlistTable > tbody').append("<tr data-id='" + track.nid + "'>"
+		$('#playlistTable > tbody').append("<tr data-id='" + track.id + "'>"
 			+ "<td style='vertical-align:middle'><a href='#'><img class='albumArt' src='" + track.albumArtRef[0].url + "'/></a></td>"
 			+ "<td style='vertical-align:middle'>" + track.artist + "</td>"
 			+ "<td style='vertical-align:middle'>" + track.title + "</td>"
@@ -218,7 +218,8 @@ function loadPlaylist() {
 	// When the call succeds, add all tracks to playlistTable
 	function success(playlistJson) {
 		var resultArray = $.parseJSON( playlistJson );
- 					
+ 					console.log(resultArray);
+
 		$.each(resultArray, function(index, track) {
 			handleEvent_TrackAddedToPlaylist(track);
 		});
